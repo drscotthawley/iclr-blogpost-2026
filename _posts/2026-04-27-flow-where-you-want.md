@@ -429,10 +429,13 @@ To get a better survey of the guidance capabilities, let's make a 10x10 grid of 
 target = torch.arange(10).repeat(10).to(device) #  [0,1,2,..9, 0,1,2,..9, ...]
 guidance_dict['target'] = target
 torch.manual_seed(42)         # (optional) for reproducibility
+start = time()
 x1 = generate_samples(sub, n_samples=len(target), guidance_dict=guidance_dict)
 show_grid(x1, "Guided samples")
+print(f"Elapsed: { time() - start:.3f}s")
 {% endhighlight %}
 
+`Elapsed: 1.972s`
 
 {% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/class_guidance_grid.png" class="img-fluid" %}
 
@@ -654,12 +657,17 @@ guidance_dict ={'classifier': z_classifier,
                 't_min': 0.01,  't_max': 0.99, }
 
 torch.manual_seed(42) # remove for new samples each time
+start = time()
 x1 = generate_samples(sub, n_samples=len(guidance_dict['target']), guidance_dict=guidance_dict)
+print(f"Elapsed: { time() - start:.3f}s")
 show_grid(x1, "Latent-Only Guidance")
 {% endhighlight %}
 </details>
 
+`Elapsed: 0.154s`
+
 {% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/latent_guidance_grid.png" class="img-fluid" %}
+
 
 That executes very quickly, even on a CPU, and the results are just as good as before.
 Since we no longer have to propagate gradients through the much larger VAE decoder model and pixel-space classifer, we can get answers a lot faster via our small latents-only classifier.
