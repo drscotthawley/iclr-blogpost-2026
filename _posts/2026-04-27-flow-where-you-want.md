@@ -43,7 +43,7 @@ toc:
   - name: Inpainting
     subsections: 
       - name: Pixel Space Inpainting
-      - name: Latent Space Inpatining
+      - name: Latent Space Inpainting
       - name: "PnP-Flow: Guidance By Any Other Name"
   - name: Summary
 
@@ -88,8 +88,6 @@ Our discussion will bring us up to date on guidance methods for latent-space rec
 
 The paradigm of latent generative models is covered in another superb Dieleman post <d-cite key="dieleman2025latents"></d-cite>, and
 combining latent-space models with flow-based guidance gives us powerful, flexible tools for adding flexible controls to efficient generation. 
-
-Let's review the picture for flow-based generative modeling in latent space...
 
 Let's review the picture for flow-based generative modeling in latent space...
 
@@ -148,9 +146,8 @@ $$ \widehat{z_1} = z_t + (1-t)\vec{v_t}\tag{1} $$
 
 By similar triangles, $$\Delta \widehat{z_1} = (1-t)\Delta \vec{v}$$, which means the course correction you want is
 
-$$\Delta \vec{v} = { \Delta \widehat{z_1} \over 1-t }.$$
+$$\Delta \vec{v} = { \Delta \widehat{z_1} \over 1-t }\tag{2}$$
 
-TODO: math callout
 
 ###  Mathematical Details
 *Since you're going to more math once you try to read the scholarly literature on these topics, let's go a bit further into the math...*
@@ -361,7 +358,7 @@ def generate_samples(sub, n_samples: int, n_steps=15, z0=None, t0=0, **kwargs) -
 
 
 
-Now that we know that works, let's "supe up" `compute_dv()` to include the guidance correction.  We'll use the `torch.autograd.grad()` function to compute the gradient of the loss.  
+Now that we know that works, let's upgrade `compute_dv()` to include the guidance correction.  We'll use the `torch.autograd.grad()` function to compute the gradient of the loss.  
 First we have the `guidance_dict` that we'll use to pass through our intentions through the various layers of routines to get to `compute_dv()`:  
 
 {% highlight python %}
@@ -690,12 +687,12 @@ show_grid( torch.cat([x, M.unsqueeze(0), x_masked],dim=0),"      Original      |
 Another example would be a picture of a face where you've blocked out the nose and you want the model to fill in a nose.  Some of the "filling in" is obtained nearly "for free" because the model has only been exposed to data that satisfies the manifold or probability distribution of the training data -- e.g. If it was trained on faces, then it only ever saw faces with noses and hence can only generate faces with noses -- but the real trick is to do it "well" and have it be "good" in the end. ;-)
 
 
-There's a wealth of information on guidance as it was originally applied to diffusion models. We recommend Sander Dieleman's blog post, ["Guidance: a cheat code for diffusion models"](https://sander.ai/2022/05/26/guidance.html), for an extremly informative survey.  Yet because of the stochastic/random nature of the diffusion path, there are several "complicating" aspects of diffusion guidance that we're going to gloss over in this tutorial because in the case of deterministic, smooth flow-model trajectories, things become a lot more intuitive.
+There's a wealth of information on guidance as it was originally applied to diffusion models. We recommend Sander Dieleman's blog post, ["Guidance: a cheat code for diffusion models"](https://sander.ai/2022/05/26/guidance.html), for an extremely informative survey.  Yet because of the stochastic/random nature of the diffusion path, there are several "complicating" aspects of diffusion guidance that we're going to gloss over in this tutorial because in the case of deterministic, smooth flow-model trajectories, things become a lot more intuitive.
 
 
-We'll follow a method outlined in the paper ["Training-free Linear Image Inverses via Flows"](https://arxiv.org/abs/2310.04432) by Pokle et al, a methoda that applies to general linear inverse problems of which inpainting is a particular case, and we'll simplify their method to adapt it for *just inpainting.*
+We'll follow a method outlined in the paper ["Training-free Linear Image Inverses via Flows"](https://arxiv.org/abs/2310.04432) by Pokle et al, a method that applies to general linear inverse problems of which inpainting is a particular case, and we'll simplify their method to adapt it for *just inpainting.*
 
-The method involves generating an *entire* new image $$x_1$$ that everywhere *outside the mask matches up* with the pixels in user-supplied (masked) image $$y4$$.  So the constraint will be, given a 2D mask $$M$$ (where $$M$$=1 means there's an original pixel there, and $$M$$=0 is the masked-out region), to require that our estimate image $$\widehat{x_1}$$ (i.e. the decoded image version of the estimated latets $$\widehat{z_1}$$   ) satisfies  $$M*\widehat{x_1} = M* y$$ <d-footnote>where "$*$" denotes the elementwise or Hadamard product</d-footnote>, or in a "residual form", we'll just compute the Mean Squared Error (MSE) of $$M*(\widehat{x_1}-y)$$:
+The method involves generating an *entire* new image $$x_1$$ that everywhere *outside the mask matches up* with the pixels in user-supplied (masked) image $$y$$.  So the constraint will be, given a 2D mask $$M$$ (where $$M$$=1 means there's an original pixel there, and $$M$$=0 is the masked-out region), to require that our estimate image $$\widehat{x_1}$$ (i.e. the decoded image version of the estimated latets $$\widehat{z_1}$$   ) satisfies  $$M*\widehat{x_1} = M* y$$ <d-footnote>where "$*$" denotes the elementwise or Hadamard product</d-footnote>, or in a "residual form", we'll just compute the Mean Squared Error (MSE) of $$M*(\widehat{x_1}-y)$$:
 
 $$ {\rm Constraint:} = M^2 * (\widehat{x_1}-y)^2 $$
 
