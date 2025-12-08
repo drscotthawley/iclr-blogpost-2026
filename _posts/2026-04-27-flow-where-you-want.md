@@ -696,7 +696,10 @@ Another example would be a picture of a face where you've blocked out the nose a
 There's a wealth of information on guidance as it was originally applied to diffusion models. We recommend Sander Dieleman's blog post, ["Guidance: a cheat code for diffusion models"](https://sander.ai/2022/05/26/guidance.html), for an extremely informative survey.  Yet because of the stochastic/random nature of the diffusion path, there are several "complicating" aspects of diffusion guidance that we're going to gloss over in this tutorial because in the case of deterministic, smooth flow-model trajectories, things become a lot more intuitive.
 
 
-We'll follow a method outlined in the paper ["Training-free Linear Image Inverses via Flows"](https://arxiv.org/abs/2310.04432) by Pokle et al, a method that applies to general linear inverse problems of which inpainting is a particular case, and we'll simplify their method to adapt it for *just inpainting.*
+
+We'll follow a method outlined in the paper ["Training-free Linear Image Inverses via Flows"](https://arxiv.org/abs/2310.04432) by Pokle et al, a method that applies to general linear inverse problems of which inpainting is a particular case, and we'll simplify their method to adapt it for *just inpainting.* For a more rigorous treatment connecting flow-based inverse problem solving to posterior sampling, see also FlowDPS <d-cite key="flowdps"></d-cite>, which extends diffusion inverse solvers into the flow framework.
+
+
 
 The method involves generating an *entire* new image $$x_1$$ that everywhere *outside the mask matches up* with the pixels in user-supplied (masked) image $$y$$.  So the constraint will be, given a 2D mask $$M$$ (where $$M$$=1 means there's an original pixel there, and $$M$$=0 is the masked-out region), to require that our estimate image $$\widehat{x_1}$$ (i.e. the decoded image version of the estimated latents $$\widehat{z_1}$$   ) satisfies  $$M*\widehat{x_1} = M* y$$ <d-footnote>where "$*$" denotes the elementwise or Hadamard product</d-footnote>, or in a "residual form", we'll just compute the Mean Squared Error (MSE) of $$M*(\widehat{x_1}-y)$$:
 
