@@ -91,7 +91,7 @@ Anonymized Colab Link:
 
 In this tutorial, we'll explore inference-time "plugin" methods for flow matching and rectified flow generative models like FLUX or Stable Audio Open Small. Unlike classifier-free guidance (CFG) <d-cite key="cfg"></d-cite>, which requires training the model with your desired conditioning signal, these plugin guidance methods let you add controls at inference time—even for conditions the model never saw during training.
 
-This tutorial assumes familiarity with flow-based generative models, by which we mean "flow matching" <d-cite key="lipman2023flow"></d-cite> and/or "rectified flows" <d-cite key="rectified_flow"></d-cite>.  See the blog posts ["Flow With What You Know"](https://drscotthawley.github.io/blog/posts/FlowModels.html) <d-cite key="hawley2025flowwithwhat"></d-cite> and "A Visual Dive into Conditional Flow Matching" <d-cite key="gagneux2025cfm"></d-cite> for accessible overviews.
+This tutorial assumes familiarity with flow-based generative models, by which we mean "flow matching" <d-cite key="lipman2023flow"></d-cite> and/or "rectified flows" <d-cite key="rectified_flow"></d-cite>.  See earlier blog posts "Flow With What You Know" <d-cite key="hawley2025flowwithwhat"></d-cite> and "A Visual Dive into Conditional Flow Matching" <d-cite key="gagneux2025cfm"></d-cite> for accessible overviews.
 The key insight is that flow models generate samples through iterative integration, and at each step we can add small velocity corrections to steer toward specific goals. This works for various objectives: generating specific classes, filling in missing regions, or satisfying other desired constraints.
 
 Our discussion will bring us up to date on guidance methods for latent-space rectified flow models.  While there's an extensive literature on guidance for diffusion models <d-cite key="daras2024survey"></d-cite><d-cite key="ye2024tfg"></d-cite> -- see Sander Dieleman's excellent blog post <d-cite key="dieleman2022guidance"></d-cite> for an overview --- flow matching allows us to cast these in a more accessible and intuitive way. There's some recent work unifying guidance for diffusion and flows <d-cite key="zander_greedy"></d-cite>, but in this tutorial we'll focus on a simplified treatment for flows only.
@@ -1003,7 +1003,7 @@ Thus we see that works, though it also seems to "take some liberties": most of t
 
 The results are similar to the previous inpainting method of Pokle et al, just a different way of doing it that may prove worthwhile. 
 
-PnP-Flow is a general guidance method not limited to inpainting or even "linear" image degradations. I recommend looking into it further for other tasks and datasets --- and let me know what sort of results you find!
+PnP-Flow is a general guidance method not limited to inpainting or even "linear" image degradations. We recommend looking into it further for other tasks and datasets --- and let us know what sort of results you find!
 
 
 
