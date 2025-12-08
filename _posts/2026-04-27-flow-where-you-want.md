@@ -261,8 +261,8 @@ $\Delta v$  will be based on the classifier's output using the *projected estima
 
 In our latent space model, we flow with latents $z$ which must be *decoded* using the VAE's decoder $D$ :
 
-
 $$\widehat{z_1} = z_t + (1-t) v_t$$
+
 $$\widehat{x_1} = D(\widehat{z_1})$$
 
 
