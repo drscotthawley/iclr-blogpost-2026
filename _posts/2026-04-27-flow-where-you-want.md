@@ -189,7 +189,7 @@ Now let's apply this to a concrete example.
 
 If we want our model to generate a member of a particular class, we can use an external classifier to examine the generated samples. The constraint to minimize will be the difference between the desired class and the `argmax` of the classifier output (or some similar relationship that enforces the class compliance).
 
-For our flow model, we'll use [the winning submission](https://github.com/Ocrabit/dl_class_projects/blob/main/dl_experimentation/submissions/marco_submission.py) from the [2025 DLAIE Leaderboard Contest](https://2025-dlaie-leaderboard.streamlit.app/) on unconditional latent flow matching of MNIST digits.  For the classifier, we'll use the [official evaluation classifier](https://github.com/DLAIE/2025-LeaderboardContest/blob/main/evaluate_submission.py) from the same contest.
+We'll use a pretrained unconditional flow model on MNIST digits, operating in the latent space of a pretrained VAE, and a pretrained classifier on MNIST digits to provide the guidance signal.
 
 
 ### Setup the Flow Model and Classifier
