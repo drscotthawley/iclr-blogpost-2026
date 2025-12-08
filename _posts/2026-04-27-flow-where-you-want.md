@@ -1,6 +1,6 @@
 ---
 layout: distill
-title: "Flow Where You Want: Understanding Test-Time Guidance of Latent Flow Models"
+title: "Flow Where You Want"
 description: 
   "This tutorial demonstrates how to add inference-time controls to pretrained flow-based generative models to make them perform tasks they weren't trained to do. We take an unconditional flow model trained on MNIST digits and apply two types of guidance: classifier guidance to generate specific digits, and inpainting to fill in missing pixels. Both approaches work by adding velocity corrections during the sampling process to steer the model toward desired outcomes. Since modern generative models operate in compressed latent spaces, we examine guidance methods that work directly in latent space as well as those that decode to pixel space. We also explore PnP-Flow, which satisfies constraints by iteratively projecting samples backward and forward in time rather than correcting flow velocities. The approaches demonstrated here work with other flow models and control tasks, so you can guide flows where you want them to go."
 date: 2026-04-27
@@ -18,14 +18,10 @@ mermaid:
 #   - name: Anonymous
 
 authors:
-  - name: Flo Gida
-    url: "https://en.wikipedia.org/wiki/Flo_Rida"
+  - name: Anonymous Authors
+    url: "https://en.wikipedia.org"
     affiliations:
-      name: WattaHoggz, FL
-  - name: Yu the Great
-    url: "https://en.wikipedia.org/wiki/Yu_the_Great"
-    affiliations:
-      name: Xia Dynasty, China
+      name: Anonymous Institution
 
 # must be the exact same name as your blogpost
 bibliography: 2026-04-27-flow-where-you-want.bib
@@ -72,6 +68,16 @@ _styles: >
   }
 ---
 
+
+
+
+<div style="text-align: center; margin: 0;">
+Anonymized Colab Link:
+<a href="https://colab.research.google.com/drive/1QkU7NB3eqlPijv1b5GKuC97qdBUzzDVc?usp=sharing" target="_">
+<img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" style="display: inline-block;"/></a>
+</div>
+
+
 # Introduction
 
 In this tutorial, we'll explore inference-time "plugin" methods for flow matching and rectified flow generative models like FLUX or Stable Audio Open Small. Unlike classifier-free guidance (CFG) <d-cite key="cfg"></d-cite>, which requires training the model with your desired conditioning signal, these plugin guidance methods let you add controls at inference time—even for conditions the model never saw during training.
@@ -79,7 +85,7 @@ In this tutorial, we'll explore inference-time "plugin" methods for flow matchin
 This tutorial assumes familiarity with flow-based generative models, by which we mean "flow matching" <d-cite key="lipman2023flow"></d-cite> and/or "rectified flows" <d-cite key="rectified_flow"></d-cite>.  See the blog post ["Flow With What You Know"](https://drscotthawley.github.io/blog/posts/FlowModels.html) <d-cite key="hawley2025flowwithwhat"></d-cite> for an overview, and/or my IJCNN 2025 tutorial <d-cite key="hawley_practical"></d-cite> for further detail.
 The key insight is that flow models generate samples through iterative integration, and at each step we can add small velocity corrections to steer toward specific goals. This works for various objectives: generating specific classes, filling in missing regions, or satisfying other desired constraints.
 
-Our discussion will bring us up to date on guidance methods for latent-space rectified flow models.  While there's an extensive literature on guidance for diffusion models [@daras2024survey, @ye2024tfg] -- see Sander Dieleman's excellent blog post <d-cite key="dieleman2022guidance"></d-cite> for an overview --- flow matching allows us to cast these in a more accessible and intuitive way. There's some recent work unifying guidance for diffusion and flows <d-cite key="zander_greedy"></d-cite>, but in this tutorial we'll focus on a simplified treatment for flows only.
+Our discussion will bring us up to date on guidance methods for latent-space rectified flow models.  While there's an extensive literature on guidance for diffusion models <d-cite key="daras2024survey"></d-cite><d-cite key="ye2024tfg"></d-cite> -- see Sander Dieleman's excellent blog post <d-cite key="dieleman2022guidance"></d-cite> for an overview --- flow matching allows us to cast these in a more accessible and intuitive way. There's some recent work unifying guidance for diffusion and flows <d-cite key="zander_greedy"></d-cite>, but in this tutorial we'll focus on a simplified treatment for flows only.
 
 The paradigm of latent generative models is covered in another superb Dieleman post <d-cite key="dieleman2025latents"></d-cite>, and
 combining latent-space models with flow-based guidance gives us powerful, flexible tools for adding flexible controls to efficient generation. 
@@ -118,7 +124,7 @@ path="assets/img/2026-04-27-flow-where-you-want/vae_flow_diag-FlowTypes.drawio.s
 
 
 
-These (nearly) straight trajectories can be obtained by "ReFlow" distillation of another model (covered in [@rectified_flow, @hawley2025flowwithwhat]) or by insisting during training that the models yield paths agreeing with Optimal Transport such as the "minibatch OT" method of Tong et al <d-cite key="tong2024improving"></d-cite>.  Even if the model's trajectories aren't super-straight, we'll see that the guidance methods we use can be applied fairly generally anyway. 
+These (nearly) straight trajectories can be obtained by "ReFlow" distillation of another model (covered in <d-cite key="rectified_flow"></d-cite><d-cite key="hawley2025flowwithwhat"></d-cite> or by insisting during training that the models yield paths agreeing with Optimal Transport such as the "minibatch OT" method of Tong et al <d-cite key="tong2024improving"></d-cite>.  Even if the model's trajectories aren't super-straight, we'll see that the guidance methods we use can be applied fairly generally anyway. 
 
 
 ## Projecting and Correcting
@@ -179,25 +185,482 @@ If we want our model to generate a member of a particular class, we can use an e
 For our flow model, we'll use [the winning submission](https://github.com/Ocrabit/dl_class_projects/blob/main/dl_experimentation/submissions/marco_submission.py) from the [2025 DLAIE Leaderboard Contest](https://2025-dlaie-leaderboard.streamlit.app/) on unconditional latent flow matching of MNIST digits.  For the classifier, we'll use the [official evaluation classifier](https://github.com/DLAIE/2025-LeaderboardContest/blob/main/evaluate_submission.py) from the same contest.
 
 
+### Setup the Flow Model and Classifier
+
+Let’s generate and draw some sample images.
+
+<details>
+<summary>Show Code</summary>
+{% highlight python %}
+from torchvision.utils import make_grid
+import matplotlib.pyplot as plt
+
+# generate some samples
+n_samples = 10
+x1 = sub.generate_samples(n_samples=n_samples)
+x1.shape
 
 
-```python
-# Very simple classifier in latent space
-from torch import nn
+def show_grid(x1, title=None):
+    if len(x1.shape) == 3: x1 = x1.unsqueeze(1)  # add channels dim
+    grid = make_grid(x1, nrow=10, padding=2, normalize=False)
+    plt.figure(figsize=(4, 4))
+    plt.imshow(grid.permute(1, 2, 0).cpu(), cmap='gray')
+    plt.axis('off')
+    if title: plt.title(title)
+    plt.tight_layout()
+    plt.show()
 
+show_grid(x1, "Sample generated images")
+{% endhighlight %}
+
+</details>
+
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/gen_image_row_1.png" class="img-fluid" %}
+
+Now we'll setup the (pretrained) classifier we’ll use for the guidance:
+Let’s make a plot showing the classifier’s output probabilities (aka likelihoods) across all classes, for all 10 samples. The samples will be the rows, and the class-likelihoods outputs from the classifier will be the columns, where brightness is correlated with likelihood.
+
+<details><summary>Show Code</summary>
+{% highlight python %}
+def show_probs(probs, x=None):
+    """show probs as colormap intensities via imshow.
+    have each row be a sample and each column be a class probability"""
+    ncols = 1 if x is None else 2
+    fig, axs = plt.subplots(1, ncols, figsize=(8, 4))
+    if ncols == 1: axs = [axs]
+
+    if x is not None:  # show a little version of the x image for each row
+        axs[0].imshow(make_grid(x.unsqueeze(1).cpu(), nrow=1, padding=2, normalize=False).permute(1, 2, 0).cpu(), cmap='gray')
+        axs[0].axis('off')
+
+    # show probabilities as an intensity map
+    im = axs[ncols-1].imshow(probs.cpu(), cmap='gray')
+    axs[ncols-1].set_xlabel("Class")
+    axs[ncols-1].set_ylabel("Sample #")
+    plt.colorbar(im, ax=axs[ncols-1])
+    plt.tight_layout()
+
+show_probs(probs, x=x1)
+{% endhighlight %}
+</details>
+
+
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/show_probs_1.png" class="img-fluid" %}
+
+
+From the “random” distribution of generated digits, we see that this is an unconditional generative model: there’s nothing determining the classes of the outputs – until we add guidance, below! ;-) In a short while, we’ll reproduce that diagram, but we’ll use guidance to get one class per sample, in order, along the diagonal.
+
+To do that, we’re going to have to “break open” the generate_samples routine and even the integrate_path routine to allow us to add a correction to the velocity 
+ generated by the flow model at time 
+. That correction 
+ will be based on the classifier’s output using the projected estimate 
+ of the final data, which we’ll obtain via linear extrapolation.
+
+In our latent space model, we flow with latents 
+ which must be decoded using the VAE’s decoder:
+
+$$\widehat{z_1} = z_t + (1-t) v_t$$
+$$\widehat{x_1} = D(\widehat{z_1})$$
+
+
+The correction $\Delta v$  will generated from a constraint which in this case is just like regular "classifier loss" function in a supervised learning problem. The desired class label is the "target" and the classifier output of the projected estimate is the "prediction".
+
+Our code will follow this general layout: 
+
+{% highlight python %}
+
+loss_fn = torch.nn.CrossEntropyLoss()
+
+v_t = flow_model(z_t, t)
+z1_hat = z_t + (1-t)*v_t               # projected destination
+x1_hat = sub.vae.decoder(z1_hat)       # decode it to pixel space
+probs = classify(classifier, x1_hat)   # classifer operates in pixel space
+loss = loss_fn(probs, target)          # "supervised learning"
+delta_v = magic_function(loss,...???)  # <--- here's the part we need to work out
+v_t = v_t + delta_v * guidance_strength  # we can set the strength of the correction
+{% endhighlight %}
+
+
+To convert that `loss` into a "velocity," we can take its gradient. When training a model, one typically takes the gradient with respect to the model weights. For inference-time guidance,
+however, we will take the gradient with respect to the flow coordinates $z$  in the latent space, thereby generating a vector in the latent space.
+
+PyTorch lets us compute the gradient with respect to anything (in the autograd graph). We just need to tell it what we want. And we need to be careful to make sure that the VAE and flow models stay frozen, so the only thing that's allowed to change are the latents $z$.
+
+The cleanest way to pull this off, code-wise, is to create a function called `compute_v()` which for starters will just call the flow model, but then we'll add to it with guidance info:
+
+{% highlight python %}
+# wherever we used to just call flow_model(), we'll now call compute_v() instead
+@torch.no_grad()
+def compute_v(flow_model, z, t, guidance_dict=None, **kwargs):
+    v_t = flow_model(z, t)
+    if guidance_dict is not None:
+        v_t += compute_dv(v_t, z, t, guidance_dict, **kwargs)
+    return v_t
+
+@torch.enable_grad()  # <-- later, this will be a key for getting guidance
+def compute_dv(v_t, z, t, g:dict, **kwargs):
+    "placeholder for now, will add guidance math later"
+    return torch.zeros_like(v_t).detach() # no correction yet; no gradients returned
+{% endhighlight %}
+
+We'll to use some typical "boilerplate" flow integration code, except we'll add "`**kwargs`" everywhere so we can pass controls "all the way in" to the `compute_dv()` guidance routine, and pair `flow_model()` as an arg to `compute_v()` via `functools.partial`.
+
+
+<details><summary>Show Flow Integration Code</summary>
+{% highlight python %}
+
+from functools import partial  # use partial to package flow_model with compute_v
+
+@torch.no_grad()
+def rk4_step(f, y, t, dt, **kwargs):  # regular rk4, + kwargs passthrough
+    # f: callable (y, t) -> dy/dt
+    k1 = f(y, t, **kwargs)
+    k2 = f(y + 0.5 * dt * k1, t + 0.5 * dt, **kwargs)
+    k3 = f(y + 0.5 * dt * k2, t + 0.5 * dt, **kwargs)
+    k4 = f(y + dt * k3, t + dt, **kwargs)
+    return y + (dt / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
+
+@torch.no_grad()
+def warp_time(t, dt=None, s=.5):
+    """Parametric Time Warping: s = slope in the middle.
+        s=1 is linear time, s < 1 goes slower near the middle, s>1 goes slower near the ends
+        s = 1.5 gets very close to the "cosine schedule", i.e. (1-cos(pi*t))/2, i.e. sin^2(pi/2*x)"""
+    if s < 0 or s > 1.5: raise ValueError(f"s={s} is out of bounds.")
+    tw = 4 * (1 - s) * t ** 3 + 6 * (s - 1) * t ** 2 + (3 - 2 * s) * t
+    if dt:  # warped time-step requested; use derivative
+        return tw, dt * 12 * (1 - s) * t ** 2 + 12 * (s - 1) * t + (3 - 2 * s)
+    return tw
+
+
+@torch.no_grad()
+def integrate_path(model, initial_points, step_fn=rk4_step, n_steps=100, warp_fn=None, latent_2d=False, prog_bar=True, t0=0, **kwargs):
+    p = next(model.parameters())
+    device, model_dtype = p.device, p.dtype
+    current_points = initial_points.to(device=device, dtype=model_dtype).clone()
+    model.eval()
+    ts = torch.linspace(t0, 1, n_steps, device=device, dtype=model_dtype)
+    if warp_fn: ts = warp_fn(ts)
+    if latent_2d: t_batch = torch.empty((current_points.shape[0], 1), device=device, dtype=model_dtype)
+    vel_model = partial(compute_v, model)  # here's the secret sauce
+    iterator = range(len(ts) - 1)
+    if prog_bar: iterator = tqdm(iterator, desc="Integrating Path")
+    for i in iterator:
+        t, dt = ts[i], ts[i + 1] - ts[i]
+        if latent_2d: t = t_batch.fill_(t.item())
+        current_points = step_fn(vel_model, current_points, t, dt, **kwargs)
+    return current_points
+
+def generate_samples(sub, n_samples: int, n_steps=15, z0=None, t0=0, **kwargs) -> torch.Tensor:
+    z0 = torch.randn([n_samples, sub.latent_dim]).to(sub.device) if z0 is None else z0
+    z1 = integrate_path(sub.flow_model, z0, n_steps=n_steps, step_fn=rk4_step, t0=t0, **kwargs)
+    gen_xhat = F.sigmoid(sub.decode(z1).view(-1, 28, 28))
+    return gen_xhat
+{% endhighlight %}
+
+</details>
+
+
+
+Now that we know that works, let's "supe up" `compute_dv()` to include the guidance correction.  We'll use the `torch.autograd.grad()` function to compute the gradient of the loss.  
+First we have the `guidance_dict` that we'll use to pass through our intentions through the various layers of routines to get to `compute_dv()`:  
+
+{% highlight python %}
+guidance_dict = \
+    {'classifier': classifier,     # the classifier model to use
+    'decode': sub.decode,         # how to decode to pixel space for classifier
+    'loss_fn': torch.nn.CrossEntropyLoss(reduction='none'), # don't sum over batch dim
+    'target': torch.arange(10).to(device),  # desired class outcomes
+    'strength': 5.0,              # "guidance strength", you may vary this
+    't_min': 0.01, 't_max': 0.99, # t range to apply guidance, may vary these
+    }
+{% endhighlight %}
+
+
+
+Next we have the fully-equipped `compute_dv()`. This code is overly-commented to make it easy to follow each step.  (We replaced `guidance_dict` with `g` locally for brevity.)  No other changes to any preceding code are necessary. We'll be ready to do guided inference after this definition!
+
+
+{% highlight python %}
+@torch.enable_grad()  # <-- Needed to compute gradients if calling code has @torch.no_grad()
+def compute_dv(v_t, z, t, g:dict, eps=1e-6, debug=False):
+    "Compute the guidance correction to the flow velocity"
+    if t < g['t_min'] or t > g['t_max']: return torch.zeros_like(v_t).detach()
+    z.requires_grad_(True)                   # need to enable gradient tracking for z
+    z1_hat = z + (1 - t) * v_t               # linear projection to estimated endpoint
+
+    # Decoding to pixel space (if decoder provided)
+    x1_hat = z1_hat if g['decode'] is None else F.sigmoid(g['decode'](z1_hat)).view(-1, 28, 28)
+
+    logits, probs = classify(g['classifier'], x1_hat)          # run classifier
+    loss = g['loss_fn'](logits, g['target'][:len(logits)])     # loss <-> "negative log likelihood"
+
+    # Compute grad wrt z. "grad_outputs=": don't sum over over batch, keep unique to each datum
+    grad_z = torch.autograd.grad(loss, z, grad_outputs=torch.ones_like(loss), retain_graph=False)[0]
+    dv = -grad_z / (1 - t + eps)   # - minimizes, (1-t) makes it velocity, eps helps stability
+
+    z.requires_grad_(False)        # cleanup (z is a tensor so local changes could propagate)
+    return g['strength'] * dv.detach()  # detach so no gradients returned
+{% endhighlight %}
+
+Let's now generate using classifier guidance on the flow model, and visualize the results:
+
+{% highlight python %}
+torch.manual_seed(0) # for reproducibility as we change other things
+with torch.no_grad():
+   x1 = generate_samples(sub, n_samples=10, guidance_dict=guidance_dict, debug=False)
+   logits, probs = classify(classifier, x1)
+show_probs(probs, x=x1)
+{% endhighlight %}
+
+
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/show_probs_2.png" class="img-fluid" %}
+
+
+Excellent! That was our desired goal: consecutive classes along the diagonal.
+
+To get a better survey of the guidance capabilities, let's make a 10x10 grid of outputs with classes along each column:
+
+{% highlight python %}
+target = torch.arange(10).repeat(10).to(device) #  [0,1,2,..9, 0,1,2,..9, ...]
+guidance_dict['target'] = target
+torch.manual_seed(42)         # (optional) for reproducibility
+x1 = generate_samples(sub, n_samples=len(target), guidance_dict=guidance_dict)
+show_grid(x1, "Guided samples")
+{% endhighlight %}
+
+
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/class_guidance_grid.png" class="img-fluid" %}
+
+
+That worked fine, and on a GPU it's pretty fast, but on systems with only a CPU, it's *painfully* slow. So instead, let's...
+
+
+
+## Train a Latent Classifier
+We'll train a model `z_classifier` that looks only in latent space, so we can use it as a guidance signal. This can be a very simple model consisting of a few `Linear` layers:
+
+
+{% highlight python %}
 class LatentClassNet(nn.Module):
-    def __init__(self, l_dim=16, h_dim=32, n_classes=10):
+    def __init__(self, latent_dim=16, hidden_dim=32, n_classes=10):
         super().__init__()
-        dims = [l_dim, h_dim, h_dim, l_dim, n_classes]
-        self.layers = nn.ModuleList(
-            nn.Linear(a, b) for a, b in zip(dims, dims[1:]))
+        dims = [latent_dim, hidden_dim, hidden_dim, latent_dim, n_classes]
+        self.layers = nn.ModuleList([nn.Linear(in_d, out_d) for in_d, out_d in zip(dims[:-1], dims[1:])])   
     def forward(self, z):
-        for layer in self.layers[:-1]: 
-            z = F.leaky_relu(layer(z))
-        return self.layers[-1](z)
+        for layer in self.layers: z = F.leaky_relu(layer(z))
+        return z
 
 z_classifier = LatentClassNet().to(device)
+{% endhighlight %}
+
+
+This classifier will operate on *latent* encodings of the MNIST dataset. So let's save the encoded latents to disk and load them into memory. These will be our training and test data. 
+
+<details><summary>Show Code</summary>
+{% highlight python %}
+#| code-fold: true
+
+# You can probably skip this code block. It just runs MNIST
+# through the VAE's encoder and saves it to disk. 
+
+from torch.utils.data import DataLoader, TensorDataset, Subset
+from torchvision.datasets import MNIST
+from torchvision.transforms import ToTensor
+from glob import glob 
+import math 
+
+@torch.no_grad()
+def encode_dataset(vae, dataset, batch_size=512, chunk_size=10000, tag="train"):
+    """Encode dataset into VAE latents (z = mu), saving progress in temp chunk files.
+    We use temp chunks in case execution gets interrupted, we can try again & resume. 
+    """
+    device = next(vae.parameters()).device
+    total_chunks = math.ceil(len(dataset) / chunk_size) 
+    # check for existing chunk files 
+    basename = f"tmp_chunk_{tag}"
+    chunk_files = glob(basename+'*.pt') 
+    existing_chunks = len(chunk_files)
+    print(f"{tag}: Found {existing_chunks} of {total_chunks} expected chunks. Generating remaining...")
+    for c in range(existing_chunks, total_chunks): 
+        print(f"chunk {c+1}/{total_chunks}:",end="")
+        indices = list(range(c*chunk_size, (c+1)*chunk_size ))
+        data_subset = Subset(dataset, indices)        
+        loader = DataLoader(data_subset, batch_size=batch_size, shuffle=False)
+        all_latents, all_labels = [], []
+        must_flatten = None
+        with torch.no_grad():
+            for data, labels in loader:
+                print("=",end="") # dumb progress bar 
+                x = data.to(device)
+                # next bit is so it should work with linear layers or conv
+                if must_flatten is None or must_flatten==False:
+                    try: z, must_flatten = vae.encoder(x), False
+                    except RuntimeError:
+                        z = vae.encoder(x.view(x.size(0), -1))
+                        must_flatten = True
+                else: z = vae.encoder(x.view(x.size(0), -1))
+                mu, logvar = z
+                all_latents.append(mu.cpu())
+                all_labels.append(labels)
+        chunk_latents, chunk_labels = torch.cat(all_latents), torch.cat(all_labels)
+        tmp_filename = f"{basename}_{c+1}.pt"
+        print(f"|  Saving chunk to {tmp_filename}")
+        torch.save({ 'latents':chunk_latents, 'labels':chunk_labels }, tmp_filename)
+    
+    # Assemble all the chunks from files and return tensors.
+    print("Assembling", basename+'*.pt ...')
+    all_latents, all_labels = [], []
+    for chunk_file in glob(basename+'*.pt'): 
+        chunk_dict = torch.load(chunk_file, weights_only=True)
+        all_latents.append(chunk_dict['latents'])
+        all_labels.append(chunk_dict['labels']) 
+    latents, labels = torch.cat(all_latents), torch.cat(all_labels)
+    #for f in glob(tmp_file_base+'*.pt'): os.remove(f)   # clean up 
+    return latents, labels 
+
+def encode_mnist(vae, filename=None, batch_size=512):
+    print("Acquiring train & test MNIST image datasets...")
+    train_ds = MNIST(root='./data', train=True,  download=True, transform=ToTensor())
+    test_ds  = MNIST(root='./data', train=False, download=True, transform=ToTensor())
+    
+    print(f"\nEncoding dataset to latents...")
+    train_latents, train_labels = encode_dataset(vae, train_ds, batch_size=batch_size, tag='train')
+    test_latents, test_labels = encode_dataset(vae, test_ds, batch_size=batch_size, tag='test')
+    for f in glob('tmp_chunk_t*_c*.pt'): os.remove(f)  # clean up
+
+    if filename is not None:
+        print(f"Saving to {filename} ...")
+        torch.save({ 'train_z': train_latents,     'test_z': test_latents,
+                     'train_labels': train_labels, 'test_labels': test_labels }, filename)
+    return train_latents, train_labels
+
+
+# Encode the dataset
+latent_data_filename = 'mnist_latents.pt'
+if not os.path.exists(latent_data_filename):
+    train_latents, train_labels = encode_mnist(sub.vae, filename=latent_data_filename)
+
+
+def load_data(filename):
+    if 'MyDrive' in filename:
+        from google.colab import drive
+        drive.mount('/content/drive')
+    data_dict = torch.load(filename, weights_only=True)
+    return data_dict
+
+data_dict = load_data(latent_data_filename)
+train_z, test_z = data_dict['train_z'], data_dict['test_z']
+train_z.shape, test_z.shape
+
+# Create datasets from the latent tensors
+train_latent_ds = TensorDataset(train_z, data_dict['train_labels'][:train_z.shape[0]])
+test_latent_ds = TensorDataset(test_z, data_dict['test_labels'])
+
+batch_size = 512
+train_latent_dl = DataLoader(train_latent_ds, batch_size=batch_size, shuffle=True)
+test_latent_dl = DataLoader(test_latent_ds, batch_size=batch_size, shuffle=False)
+
+print(f"Train batches: {len(train_latent_dl)}, Test batches: {len(test_latent_dl)}")
+# print single latent size
+print(f"Latent size: {train_latent_ds[0][0].shape}")
+{% endhighlight %}  
+</details>
+
+
+
+
+Then we'll run the training loop...
+
+<details>
+<summary>Training Loop Code and Execution</summary>
+{% highlight python %}
+# Latent classifier training loop
+optimizer  = torch.optim.Adam(z_classifier.parameters(), lr=1e-3, weight_decay=1e-5)
+criterion  = nn.CrossEntropyLoss()
+epochs = 8
+for epoch in range(epochs):
+    z_classifier.train()
+    pbar = tqdm(train_latent_dl, desc=f"Epoch {epoch+1}/{epochs}", leave=False)
+    for latents, labels in pbar:
+        optimizer.zero_grad()
+        logits = z_classifier(latents.to(device))
+        loss   = criterion(logits, labels.to(device))
+        pbar.set_postfix({'train_loss': f"{loss.item():.4f}"})
+        loss.backward()
+        optimizer.step()
+    
+    # Validation
+    z_classifier.eval()
+    val_latents, val_labels = next(iter(test_latent_dl))
+    val_logits = z_classifier(val_latents.to(device))
+    val_loss   = criterion(val_logits, val_labels.to(device))
+    val_acc    = (val_logits.cpu().argmax(dim=1) == val_labels).float().mean()
+    print(f"Epoch {epoch+1}/{epochs}: train_loss={loss.item():.4f}, val_loss={val_loss.item():.4f}, val_acc={val_acc.item():.4f}")
+{% endhighlight %}
+
+
 ```
+Epoch 1/8: train_loss=0.9673, val_loss=1.1017, val_acc=0.6211
+Epoch 2/8: train_loss=0.1901, val_loss=0.1919, val_acc=0.9375
+Epoch 3/8: train_loss=0.0512, val_loss=0.1205, val_acc=0.9570
+Epoch 4/8: train_loss=0.1193, val_loss=0.1022, val_acc=0.9668
+Epoch 5/8: train_loss=0.0810, val_loss=0.0948, val_acc=0.9648
+Epoch 6/8: train_loss=0.1569, val_loss=0.0815, val_acc=0.9707
+Epoch 7/8: train_loss=0.0504, val_loss=0.0841, val_acc=0.9629
+Epoch 8/8: train_loss=0.0408, val_loss=0.0792, val_acc=0.9746
+```
+</details>
+
+
+Let's test our newly-trained latent classifier, to make sure it works before trying to use it for guidance.  We'll pull up data samples with known ground-truth "target" labels, and compare these to the predictions from the classifier.  If the targets and predictions match up, we're good to go:
+
+{% highlight python %}
+
+z, L = test_latent_ds[20:30]
+z = z.to(device) 
+show_grid(F.sigmoid(sub.decode(z)).view(-1,28,28))
+with torch.no_grad():
+    pred_class = classify(z_classifier, z, use_argmax=True)
+print("Target labels:   ",L)
+print("Predicted labels:", pred_class.cpu())
+{% endhighlight %}
+
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/gen_image_row_2.png" class="img-fluid" %}
+
+```
+Target labels:    tensor([9, 6, 6, 5, 4, 0, 7, 4, 0, 1])
+Predicted labels: tensor([9, 6, 6, 5, 4, 0, 7, 4, 0, 1])
+```
+Good! They match up.  Let's move on...
+
+
+### Latents-Only Guidance
+
+Now that we have a trained classifier that operates in latent space, we can run basically the same code as before, only it will execute wayyyyy faster...
+
+
+<details><summary>Show Code</summary>
+{% highlight python %}
+guidance_dict ={'classifier': z_classifier,
+                'decode': None,    # no decoding, latent space only
+                'loss_fn': torch.nn.CrossEntropyLoss(reduction='none'), # don't sum across batch dim
+                'target': torch.arange(10).repeat(10).to(device),
+                'strength': 5.0,   # "guidance strength"
+                't_min': 0.01,  't_max': 0.99, }
+
+torch.manual_seed(42) # remove for new samples each time
+x1 = generate_samples(sub, n_samples=len(guidance_dict['target']), guidance_dict=guidance_dict)
+show_grid(x1, "Latent-Only Guidance")
+{% endhighlight %}
+</details>
+
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/latent_guidance_grid.png" class="img-fluid" %}
+
+That executes very quickly, even on a CPU, and the results are just as good as before.
+Since we no longer have to propagate gradients through the much larger VAE decoder model and pixel-space classifer, we can get answers a lot faster via our small latents-only classifier.
+
+Let's move on to another application of guidance, for which our guidance signal doesn't depend on a separate trained (classifier) model at all: inpainting.
 
 
 
@@ -205,22 +668,35 @@ z_classifier = LatentClassNet().to(device)
 
 When inpainting, we have some "mask" inside which some of the data have been removed, and we want to use the model to fill in the missing part in a way that matches with the surrounding pixels. Let's take a look at an example from MNIST, where we show an original image, the mask and the masked-out image:
 
-[image goes uere]
+
+<details><summary>Show Code</summary>
+{% highlight python %}
+from torchvision.datasets import MNIST
+from torchvision.transforms import ToTensor
+
+test_ds  = MNIST(root='./data', train=False, download=True, transform=ToTensor())
+x = test_ds[7][0]
+H, W = x.shape[-2:]
+M = torch.ones([H,W], dtype=x.dtype, device=x.device)   # 1 = keep pixels
+M[H//3:2*H//3, W//3:2*W//3] = 0                         # 0 = mask out
+x_masked = M*x
+show_grid( torch.cat([x, M.unsqueeze(0), x_masked],dim=0),"      Original      |      Mask      |  Masked Image" )
+{% endhighlight %}
+</details>
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/inp_mask_example.png" class="img-fluid" %}
 
 
 
-Another example would be a picture of a face where you've blocked out the nose and you want the model to fill in a nose.
 
-Now, some of the "filling in" you can get "for free" because the model has only been exposed to data that satisfies the manifold or probability distribution of the training data -- e.g. If it was trained on faces, then it only ever saw faces with noses and hence can only generate faces with noses -- but the real trick is to do it "well" and have it be "good" in the end. ;-)
+Another example would be a picture of a face where you've blocked out the nose and you want the model to fill in a nose.  Some of the "filling in" is obtained nearly "for free" because the model has only been exposed to data that satisfies the manifold or probability distribution of the training data -- e.g. If it was trained on faces, then it only ever saw faces with noses and hence can only generate faces with noses -- but the real trick is to do it "well" and have it be "good" in the end. ;-)
 
 
-There's a wealth of information on guidance as it was originally applied to diffusion models.
-Sander Dieleman's blog post, ["Guidance: a cheat code for diffusion models"](https://sander.ai/2022/05/26/guidance.html), is a classic and should (eventually) be read by all.  Yet because of the stochastic/random nature of the diffusion path, there are several "complicating" aspects of diffusion guidance that we're going to gloss over in this tutorial because in the case of deterministic, smooth flow-model trajectories, things become a lot more intuitive.
+There's a wealth of information on guidance as it was originally applied to diffusion models. We recommend Sander Dieleman's blog post, ["Guidance: a cheat code for diffusion models"](https://sander.ai/2022/05/26/guidance.html), for an extremly informative survey.  Yet because of the stochastic/random nature of the diffusion path, there are several "complicating" aspects of diffusion guidance that we're going to gloss over in this tutorial because in the case of deterministic, smooth flow-model trajectories, things become a lot more intuitive.
 
 
 We'll follow a method outlined in the paper ["Training-free Linear Image Inverses via Flows"](https://arxiv.org/abs/2310.04432) by Pokle et al, a methoda that applies to general linear inverse problems of which inpainting is a particular case, and we'll simplify their method to adapt it for *just inpainting.*
 
-The method will be to try to generate an *entire* new image $$x_1$$ that everywhere *outside the mask matches up* with the pixels in user-supplied (masked) image $$y4$$.  So the constraint will be, given a 2D mask $$M$$ (where $$M$$=1 means there's an original pixel there, and $$M$$=0 is the masked-out region), to require that our estimate image $$\widehat{x_1}$$ (i.e. the decoded image version of the estimated latets $$\widehat{z_1}$$   ) satisfies  $$M*\widehat{x_1} = M* y$$, or in a "residual form", we'll just compute the Mean Squared Error (MSE) of $$M*(\widehat{x_1}-y)$$:
+The method involves generating an *entire* new image $$x_1$$ that everywhere *outside the mask matches up* with the pixels in user-supplied (masked) image $$y4$$.  So the constraint will be, given a 2D mask $$M$$ (where $$M$$=1 means there's an original pixel there, and $$M$$=0 is the masked-out region), to require that our estimate image $$\widehat{x_1}$$ (i.e. the decoded image version of the estimated latets $$\widehat{z_1}$$   ) satisfies  $$M*\widehat{x_1} = M* y$$ <d-footnote>where "$*$" denotes the elementwise or Hadamard product</d-footnote>, or in a "residual form", we'll just compute the Mean Squared Error (MSE) of $$M*(\widehat{x_1}-y)$$:
 
 $$ {\rm Constraint:} = M^2 * (\widehat{x_1}-y)^2 $$
 
@@ -255,7 +731,7 @@ where we absorbed the factor of 2 into $$\eta$$, and the last partial derivitive
 Let's implement this in code, using two different versions of the gradient calculation, depending on whether we can do it all in latent space or if we need to propagate gradients through the decoder:
 
 
-
+<details><summary>Show Code</summary>
 {% highlight python %}
 @torch.no_grad()  # gradients computed analytically!
 def ip_latents_grad(v_t, z, t, g:dict, eps=1e-6, **kwargs):
@@ -289,307 +765,248 @@ def compute_dv_inpainting(v_t, z, t, g:dict, **kwargs):
     dv = -g['strength'] * t_timescale(t, **kwargs) * grad
     return dv.detach()
 {% endhighlight %}
+</details>
 
-## PnP-Flow Guidance By Another Name
 
-Some people may want to restrict the use of the term "guidance" to only modifications of the velocity. But this is not the only way to cast the problem in order to achieve the desired result.
+### Do the Inpainting
 
-A method termed "PnP-Flow" by French researchers Martin et al [4] doesn't modify the velocity but rather adjusts value of the flow "position" variable $z$ (for us, the latents) at each step.<d-footnote>The paper by Pokle et al we cited earlier also included a related method, however the PnP-Flow method is a bit more general and  *much* more readable than Pokle et al. ;-) Plus, Anne Gagneux provided [code](https://github.com/annegnx/PnP-Flow) for PnP-Flow!  Gangeux's repo even provides code for the position-only (non-velocity) algorithm from Pokle et al aka "OT-ODE".</d-footnote>
+<details><summary>Show Code</summary>
+{% highlight python %}
+y = torch.stack([test_ds[i][0] for i in range(50)])
+print(y.shape)
+y = M*y
+show_grid(y.squeeze(), "Masked Images")
+{% endhighlight %}
+</details>
 
-Yet even "velocity" carries a bit of conventional weight in this case, as our gradient calculation times the strength induces a change in the flow variable, and we only cast it into a "velocity" by dividing or otherwise rescaling by a time-dependent function such as $1/(1-t)$.  
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/inp_masked_images.png" class="img-fluid" %}
 
-In fact, by adding the "overwriting"of the latent values outside the mask via interpolation, we have already included the key parts of PnP-Flow:
 
-1. compute a gradient based on our constraint,
-2. and then overwrite using an interpolated values.
+And now we run the inpainting code...
 
-Our variable definitions are a bit different from those in the PnP-Flow paper<d-footnote>Differences between our variables and those in the PnP-Flow paper: For us, $z$ are integrated flow latent variables between $z_0$ (source) and $z_1$ (target), whereas $x$ are the pixel-space representations via our VAE's decoder $\mathscr{D}$ such that $\mathscr{D}(z)=x$. In PnP-Flow, $x$ is the integrated flow  variable, $z$ is used only for their interpolation/overwrite step, and $\mathscr{D}$ is the "denoiser" aka their flow model.</d-footnote>, so reproducing their equations exactly here won't help. Intead let's set the stage: They *consider only straight-line trajectories* for which the projecting forward via linear extrapolation is *identical* to interating the flow model forward. In other words, the time-integration is *trivial* an thus instead of $$\widehat{z_1}$$ being a projection from the current latent integration variable $$z_t$$, we assume that getting $$\widehat{z_1}$$ is trivial.
+<details><summary>Show Code</summary>
+{% highlight python %}
 
-In fact the algorithm is best viewed as *starting* $t=0$, moving to our projected estimate $$\widehat{z_1}$$
-and *iterating on that*.  Consequently, it may help to dispense with the picture of integrating our position $z$ incrementially from $t=0$ to 1.  We will still step along those values of $t$, however we will use them to set *step sizes* $$(1-t)$$ for a series of prediction, correction, and back-projection steps. With that in mind, the first step is that we take our projected estimate $$\widehat{z_1}$$ and correct it by computing a gradient and move toward our goal:
+compute_dv = compute_dv_inpainting  # register our new guidance routine
+
+inpainting_dict ={'decode': sub.decode,         # how to decode to pixel space for classifier
+                'M_sq': (M**2).to(device),
+                'y': y.to(device),
+                'strength': 1.0,              # "guidance strength", you may vary this
+                't_min': 0.2, 't_max': 0.999} # t range to apply guidance, may vary these
+
+with torch.no_grad():
+    torch.manual_seed(0) # for reproducibility as we change other things
+    t0 = 0.2             # starting time as per Pokle et al
+    z0 = torch.randn([len(y), sub.latent_dim]).to(sub.device)
+    zy = sub.encode(y.to(device))   # encoded version of masked image
+    z0 = z0 * (1-t0) + zy * t0      # interpolation init
+    inpainting_dict['t_min'] = t0
+    x1 = generate_samples(sub, n_samples=len(y), t0=t0, z0=z0, guidance_dict=inpainting_dict, warp_fn=None, debug=False)
+
+show_grid(x1, "Inpainted Images") 
+{% endhighlight %}
+</details>
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/inp_inpainted_images.png" class="img-fluid" %}
+
+
+We see that the generated images generally look great, although in some cases, the in-painting code has changed pixels even where the mask is 1. We can disallow this by just resetting those values to the pixels in $y$.
+
+Turning up the guidance strength would also enforce our constraint better, but turning up too high causes the whole thing to diverge and we get garbage out.
+
+In order to experiment with other methods more easily, we should do inpainting only in latent space, and for that we will need a model that supports spatial latents....
+
+### Latent-Only Inpainting
+
+
+To do inpainting in latent space, we'll need to switch models to one where the latents preserve the spatial structure of the original images. 
+
+<details>
+<summary>Get the spatial-latents model</summary>
+{% highlight python %}
+# Get Spatial VAE & FLow DiT Model
+!wget -q --no-clobber=off https://raw.githubusercontent.com/dlaieburner/2025-leaderboard/refs/heads/main/sample_submission_dit.py
+
+try:
+    del SubmissionInterface # remove Marco's from earlier; make it reload
+except NameError:
+    pass  # nevermind
+
+from sample_submission_dit import SubmissionInterface
+
+sub = SubmissionInterface().to(device)
+{% endhighlight %}
+</details>
+
+Let's take a look at the images and their spatial-latent representations:
+
+<details><summary>Show Code</summary>
+{% highlight python %}
+#| code-fold: true
+
+# viz images and spatial latents
+from torchvision.datasets import MNIST
+test_ds  = MNIST(root='./data', train=False, download=True, transform=ToTensor())
+
+x = torch.stack([test_ds[i][0] for i in range(6)])
+if len(x.shape) < 4: x1 = x.unsqueeze(1)
+show_grid(x, "Images")
+z1 = sub.encode(x)
+show_grid((z1-z1.min())/(z1.max()-z1.min()), "Latents")
+{% endhighlight %}
+</details>
+
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/spatial_latents_viz1.png" class="img-fluid" %}
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/spatial_latents_viz2.png" class="img-fluid" %}
+
+Now we can run latent-only inpainting using the same code as before, only this time with the spatial-latent model and with `decode=None` in the guidance dictionary:
+
+<details><summary>Show Code</summary>
+{% highlight python %}
+def prepare_latent_mask(image, mask, encoder):
+    z_y = encoder(image.to(device))
+    M_z = F.interpolate(mask[None, None], size=z_y.shape[-2:], mode='bilinear', align_corners=False).to(device)
+    M_z = (M_z > 0.9).float()    # binarize it
+    return z_y * M_z, M_z**2
+
+@torch.no_grad()
+def latents_only_inpaint(sub, inpainting_dict, n_samples, n_steps=20, t0=0.2, warp_fn=None):
+    z_y, M_sq = prepare_latent_mask(y, M, sub.encode)   
+    inpainting_dict.update({'M_sq': M_sq, 'y': z_y, 't_min': t0})
+    z0 = torch.randn_like(z_y) * (1-t0) + z_y * t0         # Initialize via interpolation
+    return generate_samples(sub, n_samples, t0=t0, z0=z0,  guidance_dict=inpainting_dict, warp_fn=warp_fn)
+
+inpainting_dict ={'decode': None,            # now we're latents-only
+                'strength': 1.0,             # "guidance strength", you may vary this
+                't_min': 0.2, 't_max': 0.999} # t range to apply guidance, may vary these
+
+show_grid(y.squeeze(), "pixel y's")
+x1 = latents_only_inpaint(sub, inpainting_dict, n_samples=len(y), n_steps=10)
+print()
+show_grid(x1, "inpainted images")
+{% endhighlight %}
+</details>
+
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/latents_only_pixel_ys.png" class="img-fluid" %}
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/latents_only_inpainted_images.png" class="img-fluid" %}
+
+
+
+As before, the latent-only execution is very fast, and the results are quite good.
+There are some limitations to what's being produced. The problem is due to the low resolution of our latents. Inpainting algorithms typically assume higher resolution in order to work accurately. But this lesson was designed to run quickly on CPUs and thus there is a trade-off.
+
+Now, if we want to enforce the original pixels where the mask is one, we can do that at every stage of the integration process. We just need to modify the integration process to overwrite $z$ wherever `Mz` is 1.
+
+Let's move on and try a different method that can achieve similar results, albiet differently...
+
+
+
+
+# PnP-Flow: Guidance By Another Name
+
+The term 'guidance' typically refers to velocity modifications, but PnP-Flow by Martin et al <d-cite key="pnp_flow"></d-cite> achieves similar results by adjusting latent positions $z$ directly.<d-footnote>The paper by Pokle et al we cited earlier also included a related method, however the PnP-Flow method isn't restricted to linear problems. Plus, Anne Gagneux provided [code](https://github.com/annegnx/PnP-Flow) for PnP-Flow!  Gagneux's repo even provides code for the position-only (non-velocity) algorithm from Pokle et al aka "OT-ODE".</d-footnote>$$^,$$<d-footnote>Differences between our variables and those in the PnP-Flow paper: For us, $z$ are integrated flow latent variables between $z_0$ (source) and $z_1$ (target), whereas $x$ are the pixel-space representations via our VAE's decoder $D$ such that $D(z)=x$. In PnP-Flow, $x$ is the integrated flow  variable, $z$ is used only for their interpolation/overwrite step, and $D$ is the "denoiser" aka their flow model.</d-footnote>
+
+PnP-Flow assumes straight-line trajectories, making the forward projection trivial: $\widehat{z_1}$
+is reached by simple linear extrapolation.  Instead of incrementally moving $z$ from $t=0$ to $t=1$, PnP-Flow projects forward to $\widehat{z_1}$ and iterates on that estimate through a series of correction and projection steps. The first step applies our gradient correction:
 
 $${\rm Step\ 1.}\ \ \ \ \ \  \ \ \ \ \ \ z_1^* := \widehat{z_1} - \eta\,\gamma_t \nabla F(\widehat{z_1},y)$$
 
-where $z_1^*$ (my notation) is our goal i.e. the the endpoint of our projected course correction, and $$F(\widehat{z_1},y)$$ is our (log-exp probability) constraint.  For the time scaling, the PnP-Flow authors recommend $$\gamma_t = (1-t)^\alpha$$
-with $$\alpha \in [0,1]$$ is a hyperparameter chosen accordint to the task -- e.g., they use $$\alpha$$'s as large as 0.8 for denoising tasks, 0.5 for box inpainting, and 0.01 for random inpainting. This choice of $$\gamma_t$$ is a bit different from our earlier one of $$(1-t)/t$$. Both go to zero as $$t \rightarrow 1$$, but approach it differently and have different asymtomptotics as as $$t\rightarrow 0$$.
+where $z_1^*$ (my notation) is our goal i.e. the endpoint of our projected course correction, and $F(\widehat{z_1},y)$ is our (log-exp probability) constraint.  For the time scaling, the PnP-Flow authors recommend $\gamma_t = (1-t)^\alpha$
+with $\alpha \in [0,1]$ is a hyperparameter chosen according to the task -- e.g., they use $\alpha$'s as large as 0.8 for denoising tasks, 0.5 for box inpainting, and 0.01 for random inpainting. This choice of $\gamma_t$ is a bit different from our earlier one of $(1-t)/t$. Both go to zero as $t \rightarrow 1$, but approach it differently and have different asymptotics as $t\rightarrow 0$.
 
-In the graph below, we show our earlier choice of $$(1 - t)/t$$ in green, and $$(1 - t)^\alpha$$ in purple for various choices of $$\alpha$$:
+In the graph below, we show our earlier choice of $(1 - t)/t$ in green and $(1 - t)^\alpha$ in purple for various choices of $\alpha$:
+ 
 
-
-<div class="l-page">
   <center>
-  <iframe src="{{ 'assets/html/2026-04-27-flow-where-you-want/desmos_demo_1.html' | relative_url }}" frameborder='0' scrolling='no' height="300px" width="200px"></iframe></center>
-</div>
+  <a href="https://www.desmos.com/calculator/bcp2wiyyid">
+  <iframe src="https://www.desmos.com/calculator/bcp2wiyyid?embed" frameborder='0' scrolling='no' height="300px" width="200px"></iframe>
+<br>Interactive Desmos Graph Link</a><br><br></center>
 
-## Citations
 
-Citations are then used in the article body with the `<d-cite>` tag.
-The key attribute is a reference to the id provided in the bibliography.
-The key attribute can take multiple ids, separated by commas.
 
-The citation is presented inline like this: <d-cite key="gregor2015draw"></d-cite> (a number that displays more information on hover).
-If you have an appendix, a bibliography is automatically created and populated in it.
 
-Distill chose a numerical inline citation style to improve readability of citation dense articles and because many of the benefits of longer citations are obviated by displaying more information on hover.
-However, we consider it good style to mention author last names if you discuss something at length and it fits into the flow well — the authors are human and it’s nice for them to have the community associate them with their work.
+...where for "box inpainting" as we did above, they use $\alpha$=0.5.
 
----
+But PnP-Flow doesn't stop there!  Two other key steps remain. We then project backward to *overwrite* $z_t$ with a corrected value:
 
-## Footnotes
+$${\rm Step\ 2.}\ \ \ \ \ \  \ \ \ \  \ \ z_t := (1-t)\,z_0 + t\, z_1^* $$
 
-Just wrap the text you would like to show up in a footnote in a `<d-footnote>` tag.
-The number of the footnote will be automatically generated.<d-footnote>This will become a hoverable footnote.</d-footnote>
+We then compute a new projected estimate, same as we have before:
 
----
+$${\rm Step\  3.}\ \ \ \ \ \   \widehat{z_1} := z_t + (1-t)\,v_t(z,t)$$
 
-## Code Blocks
+....and loop over Steps 1 to 3 for each value of $t$ in our set of (discrete) integration steps, i.e. after Step 3, we let $t := t+\Delta\,t$ and go back to Step 1. Our final value of $\widehat{z_1}$ will be the output.
 
-This theme implements a built-in Jekyll feature, the use of Rouge, for syntax highlighting.
-It supports more than 100 languages.
-This example is in C++.
-All you have to do is wrap your code in a liquid tag:
+This image from the PnP-Flow paper may prove instructive, showing 3 different instances of the 3 PNP steps:
 
-{% raw  %}
-{% highlight c++ linenos %} <br/> code code code <br/> {% endhighlight %}
-{% endraw %}
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/pnp_flow_steps.png" class="img-fluid" %}
 
-The keyword `linenos` triggers display of line numbers. You can try toggling it on or off yourself below:
 
-{% highlight c++ %}
+This has a superficial resemblance to the "[ping-pong](https://github.com/Stability-AI/stable-audio-tools/blob/31932349d98c550c48711e7a5a40b24aa3d7c509/stable_audio_tools/inference/sampling.py#L221)" integration method used by the flow model Stable Audio Open Small (SAOS) <d-cite key="sao_small"></d-cite>, with a key distinction: the ping-pong integrator and updates the time-integrated latent variable $z$ (called "$x$" in SAOS), whereas for PnP-Flow it is the projection $\widehat{z_1}$ (called ["denoised"](https://github.com/Stability-AI/stable-audio-tools/blob/31932349d98c550c48711e7a5a40b24aa3d7c509/stable_audio_tools/inference/sampling.py#L242) in SAOS) that is the primary variable that is maintained between steps. This is a subtle distinction but worth noting.<d-footnote>The near trivial nature of integration for near-OT paths of flow models means that one can implement a flow version of DITTO <d-cite key="ditto"></d-cite> that avoids the expensive back-integration needed for diffusion models. The result is also superficially similar to PnP-Flow, but with gradient steps applied to $z$ instead of $\widehat{z_1}$.</d-footnote>
 
-int main(int argc, char const \*argv[])
-{
-string myString;
+To implement PnP-Flow in code, let's replace our "integrator" with something specific to PnP-Flow:
 
-    cout << "input a string: ";
-    getline(cin, myString);
-    int length = myString.length();
 
-    char charArray = new char * [length];
-
-    charArray = myString;
-    for(int i = 0; i < length; ++i){
-        cout << charArray[i] << " ";
-    }
-
-    return 0;
-
-}
-
+{% highlight python %}
+@torch.no_grad()
+def sample_pnpflow(model, z0, n_steps=10, alpha=0.5, n_avg=5, warp_fn=lambda x: x, guidance_dict=None):
+    ts = warp_fn(torch.linspace(0, 1, n_steps, device=z0.device, dtype=z0.dtype))  
+    z1_hat = z0
+    for t in ts[1:]:
+        grad = guidance_dict['M_sq'] * (z1_hat - guidance_dict['y'])
+        gamma_t = (1 - t) ** alpha
+        z1_star = z1_hat - guidance_dict['strength'] * gamma_t * grad        
+        projections = []           # Average multiple noisy projections
+        for _ in range(n_avg):
+            z = t * z1_star  +  (1 - t) * torch.randn_like(z1_star) 
+            projections.append(z + (1 - t) * model(z, t))
+        z1_hat = torch.stack(projections).mean(dim=0)
+    return z1_hat
 {% endhighlight %}
 
----
 
-## Diagrams
+The model we used earlier for latents-only inpainting was trained to have straight trajectories, so we should be able to use it again here, just calling `sample_pnpflow` (instead of `integrate_path`). The results are as follows:
 
-This theme supports generating various diagrams from a text description using [mermaid.js](https://mermaid-js.github.io/mermaid/){:target="\_blank"} directly.
-Below, we generate examples of such diagrams using [mermaid](https://mermaid-js.github.io/mermaid/){:target="\_blank"} syntax.
+<details><summary>Show Code</summary>
+{% highlight python %}
+#| code-fold: true
+@torch.no_grad()
+def pnp_flow_inpaint(sub, inpainting_dict, n_samples, n_steps=10, t0=0, seed=None, **kwargs):
+    """Inpaint using PnP-Flow method"""
+    if seed is not None: torch.manual_seed(seed)
+    z_y, M_sq = prepare_latent_mask(y, M, sub.encode)
+    inpainting_dict.update({'M_sq': M_sq, 'y': z_y, 't_min': t0})
+    z0 = torch.randn_like(z_y) * (1-t0) + z_y * t0
+    return sample_pnpflow(sub.flow_model, z0, guidance_dict=inpainting_dict, **kwargs)
 
-**Note:** To enable mermaid diagrams, you need to add the following to your post's front matter:
 
-```yaml
-mermaid:
-  enabled: true
-  zoomable: true # optional, for zoomable diagrams
-```
+inpainting_dict = {'strength': 1.0, 't_min': 0.0, 't_max': 0.999}
 
-The diagram below was generated by the following code:
+show_grid(y,"Masked pixel images (y)")
 
+z1 = pnp_flow_inpaint(sub, inpainting_dict, n_samples=len(y), n_steps=20, alpha=0.5, seed=0)
+x1 = F.sigmoid(sub.decode(z1)).cpu()   # convert latents to pixels
+show_grid(x1, f"Inpainted images (alpha=0.5, strength={inpainting_dict['strength']})")
+{% endhighlight %}
+</details>
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/pnpflow_masked_ys.png" class="img-fluid" %}
+{% include figure.liquid path="assets/img/2026-04-27-flow-where-you-want/pnpflow_inpainted_images.png" class="img-fluid" %}
 
-````
-```mermaid
-sequenceDiagram
-    participant John
-    participant Alice
-    Alice->>John: Hello John, how are you?
-    John-->>Alice: Great!
-```
-````
+Thus we see that works, though it also seems to "take some liberties": most of the letters in the second group look like "boldface" versions of the top ones. This could be because of the low spatial resolution of the latents, e.g. that they are encoding information about curvature or other aspects of the shape.
 
-```mermaid
-sequenceDiagram
-    participant John
-    participant Alice
-    Alice->>John: Hello John, how are you?
-    John-->>Alice: Great!
-```
+The results are similar to the previous inpainting method of Pokle et al, just a different way of doing it that may prove worthwhile. 
 
----
+PnP-Flow is a general guidance method not limited to inpainting or even "linear" image degradations. I recommend looking into it further for other tasks and datasets --- and let me know what sort of results you find!
 
-## Tweets
 
-An example of displaying a tweet:
-{% twitter https://twitter.com/rubygems/status/518821243320287232 %}
 
-An example of pulling from a timeline:
-{% twitter https://twitter.com/jekyllrb maxwidth=500 limit=3 %}
+# Summary
 
-For more details on using the plugin visit: [jekyll-twitter-plugin](https://github.com/rob-murray/jekyll-twitter-plugin)
+Training generative models can be expensive—lots of data, electricity, compute time. So what if you could take a pretrained model and add controls at inference time instead? That's what this tutorial explored. While similar ideas are emerging for steering autoregressive models <d-cite key="zhao2025steeringautoregressive"></d-cite>, here we focused on pretrained flow models.
 
----
+The key idea is simple: at each integration step, you project forward to estimate where you'll end up ($\,\widehat{z_1}\,$)
+, check how far that is from where you want to be, and add a small velocity correction to steer toward your goal. We applied this to an unconditional MNIST flow model for two tasks: generating specific digit classes via classifier guidance, and filling in masked-out regions via inpainting.
 
-## Blockquotes
+We looked at four approaches. First, standard classifier guidance in pixel space—it works but it's slow because you're propagating gradients through the VAE decoder. Second, we trained a simple latent-space classifier and did the same thing much faster. Third, we implemented the linear inpainting method from Pokle et al, which operates directly on latents. Fourth, we tried PnP-Flow, which achieves guidance not by correcting velocities but by iteratively projecting samples forward and backward in time.
 
-<blockquote>
-    We do not grow absolutely, chronologically. We grow sometimes in one dimension, and not in another, unevenly. We grow partially. We are relative. We are mature in one realm, childish in another.
-    —Anais Nin
-</blockquote>
-
----
-
-## Layouts
-
-The main text column is referred to as the body.
-It is the assumed layout of any direct descendants of the `d-article` element.
-
-<div class="fake-img l-body">
-  <p>.l-body</p>
-</div>
-
-For images you want to display a little larger, try `.l-page`:
-
-<div class="fake-img l-page">
-  <p>.l-page</p>
-</div>
-
-All of these have an outset variant if you want to poke out from the body text a little bit.
-For instance:
-
-<div class="fake-img l-body-outset">
-  <p>.l-body-outset</p>
-</div>
-
-<div class="fake-img l-page-outset">
-  <p>.l-page-outset</p>
-</div>
-
-Occasionally you’ll want to use the full browser width.
-For this, use `.l-screen`.
-You can also inset the element a little from the edge of the browser by using the inset variant.
-
-<div class="fake-img l-screen">
-  <p>.l-screen</p>
-</div>
-<div class="fake-img l-screen-inset">
-  <p>.l-screen-inset</p>
-</div>
-
-The final layout is for marginalia, asides, and footnotes.
-It does not interrupt the normal flow of `.l-body`-sized text except on mobile screen sizes.
-
-<div class="fake-img l-gutter">
-  <p>.l-gutter</p>
-</div>
-
----
-
-## Other Typography?
-
-Emphasis, aka italics, with _asterisks_ (`*asterisks*`) or _underscores_ (`_underscores_`).
-
-Strong emphasis, aka bold, with **asterisks** or **underscores**.
-
-Combined emphasis with **asterisks and _underscores_**.
-
-Strikethrough uses two tildes. ~~Scratch this.~~
-
-1. First ordered list item
-2. Another item
-
-- Unordered sub-list.
-
-1. Actual numbers don't matter, just that it's a number
-   1. Ordered sub-list
-2. And another item.
-
-   You can have properly indented paragraphs within list items. Notice the blank line above, and the leading spaces (at least one, but we'll use three here to also align the raw Markdown).
-
-   To have a line break without a paragraph, you will need to use two trailing spaces.
-   Note that this line is separate, but within the same paragraph.
-   (This is contrary to the typical GFM line break behavior, where trailing spaces are not required.)
-
-- Unordered lists can use asterisks
-
-* Or minuses
-
-- Or pluses
-
-[I'm an inline-style link](https://www.google.com)
-
-[I'm an inline-style link with title](https://www.google.com "Google's Homepage")
-
-[I'm a reference-style link][Arbitrary case-insensitive reference text]
-
-[I'm a relative reference to a repository file](../blob/master/LICENSE)
-
-[You can use numbers for reference-style link definitions][1]
-
-Or leave it empty and use the [link text itself].
-
-URLs and URLs in angle brackets will automatically get turned into links.
-http://www.example.com or <http://www.example.com> and sometimes
-example.com (but not on Github, for example).
-
-Some text to show that the reference links can follow later.
-
-[arbitrary case-insensitive reference text]: https://www.mozilla.org
-[1]: http://slashdot.org
-[link text itself]: http://www.reddit.com
-
-Here's our logo (hover to see the title text):
-
-Inline-style:
-![alt text](https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png "Logo Title Text 1")
-
-Reference-style:
-![alt text][logo]
-
-[logo]: https://github.com/adam-p/markdown-here/raw/master/src/common/images/icon48.png "Logo Title Text 2"
-
-Inline `code` has `back-ticks around` it.
-
-```javascript
-var s = "JavaScript syntax highlighting";
-alert(s);
-```
-
-```python
-s = "Python syntax highlighting"
-print(s)
-```
-
-```
-No language indicated, so no syntax highlighting.
-But let's throw in a <b>tag</b>.
-```
-
-Colons can be used to align columns.
-
-| Tables        |      Are      |  Cool |
-| ------------- | :-----------: | ----: |
-| col 3 is      | right-aligned | $1600 |
-| col 2 is      |   centered    |   $12 |
-| zebra stripes |   are neat    |    $1 |
-
-There must be at least 3 dashes separating each header cell.
-The outer pipes (|) are optional, and you don't need to make the
-raw Markdown line up prettily. You can also use inline Markdown.
-
-| Markdown | Less      | Pretty     |
-| -------- | --------- | ---------- |
-| _Still_  | `renders` | **nicely** |
-| 1        | 2         | 3          |
-
-> Blockquotes are very handy in email to emulate reply text.
-> This line is part of the same quote.
-
-Quote break.
-
-> This is a very long line that will still be quoted properly when it wraps. Oh boy let's keep writing to make sure this is long enough to actually wrap for everyone. Oh, you can _put_ **Markdown** into a blockquote.
-
-Here's a line for us to start with.
-
-This line is separated from the one above by two newlines, so it will be a _separate paragraph_.
-
-This line is also a separate paragraph, but...
-This line is only separated by a single newline, so it's a separate line in the _same paragraph_.
+The math here is much simpler than for typical diffusion methods because flow trajectories are smooth and deterministic. We've glossed over a lot of detail compared to the research papers, but hopefully this gives you enough to experiment with your own controls. There are limits to the effectiveness of guidance: small models that don't generalize well won't suddenly work miracles if you try to push them too far outside their training distribution. Nevertheless, these plugin methods are worth exploring as accessible ways to steer generative flows where you want them to go. 
