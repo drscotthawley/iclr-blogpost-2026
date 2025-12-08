@@ -79,9 +79,11 @@ _styles: >
 
 
 <div style="text-align: center; margin: 0;">
+This post is also an executable notebook.<br>
 Anonymized Colab Link:
 <a href="https://colab.research.google.com/drive/1QkU7NB3eqlPijv1b5GKuC97qdBUzzDVc?usp=sharing" target="_">
 <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" style="display: inline-block;"/></a>
+<br><br>
 </div>
 
 
