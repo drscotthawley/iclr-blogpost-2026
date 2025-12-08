@@ -697,7 +697,7 @@ There's a wealth of information on guidance as it was originally applied to diff
 
 
 
-We'll follow a method outlined in the paper ["Training-free Linear Image Inverses via Flows"](https://arxiv.org/abs/2310.04432) by Pokle et al, a method that applies to general linear inverse problems of which inpainting is a particular case, and we'll simplify their method to adapt it for *just inpainting.* For a more rigorous treatment connecting flow-based inverse problem solving to posterior sampling, see also FlowDPS <d-cite key="flowdps"></d-cite>, which extends diffusion inverse solvers into the flow framework.
+We'll follow a method by Pokle et al <d-cite key="pokle2024trainingfree"></d-cite>, a method that applies to general linear inverse problems of which inpainting is a particular case, and we'll simplify their method to adapt it for *just inpainting.* For a more rigorous treatment connecting flow-based inverse problem solving to posterior sampling, see also FlowDPS <d-cite key="flowdps"></d-cite>, which extends diffusion inverse solvers into the flow framework.
 
 
 
