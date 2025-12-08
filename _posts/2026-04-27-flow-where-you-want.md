@@ -189,7 +189,7 @@ Now let's apply this to a concrete example.
 
 If we want our model to generate a member of a particular class, we can use an external classifier to examine the generated samples. The constraint to minimize will be the difference between the desired class and the `argmax` of the classifier output (or some similar relationship that enforces the class compliance).
 
-We'll use a pretrained unconditional flow model on MNIST digits, operating in the latent space of a pretrained VAE, and a pretrained classifier on MNIST digits to provide the guidance signal.
+We'll use a pretrained unconditional flow model on MNIST digits, operating in the latent space of a pretrained VAE, and a classifier on MNIST digits to provide the guidance signal.
 
 
 ### Setup the Flow Model and Classifier
