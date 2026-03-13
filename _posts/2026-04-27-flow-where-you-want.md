@@ -17,10 +17,10 @@ mermaid:
 #   - name: Anonymous
 
 authors:
-  - name: Anonymous Authors
-    url: "https://en.wikipedia.org"
+  - name: Scott H. Hawley 
+    url: "https://www.scotthawley.com
     affiliations:
-      name: Anonymous Institution
+      name: Belmont University 
 
 # must be the exact same name as your blogpost
 bibliography: 2026-04-27-flow-where-you-want.bib
