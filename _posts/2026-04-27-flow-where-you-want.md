@@ -1039,7 +1039,7 @@ The key idea is simple: at each integration step, you project forward to estimat
 
 We looked at four approaches. First, standard classifier guidance in pixel space—it works but it's slow because you're propagating gradients through the VAE decoder. Second, we trained a simple latent-space classifier and did the same thing much faster. Third, we implemented the linear inpainting method from Pokle et al, which operates directly on latents. Fourth, we tried PnP-Flow, which achieves guidance not by correcting velocities but by iteratively projecting samples forward and backward in time.
 
-While we kept things small by design — MNIST runs quickly even on a CPU — the methods 
+While we kept things small by design—MNIST runs quickly even on a CPU—the methods 
 demonstrated here are not limited to toy datasets. The same velocity correction 
 framework applies to larger latent flow models such as FLUX or Stable Diffusion, 
 and the guidance signal need not come from a classifier: a CLIP-based loss, for 
