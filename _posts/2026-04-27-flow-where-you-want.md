@@ -18,7 +18,7 @@ mermaid:
 
 authors:
   - name: Scott H. Hawley 
-    url: "https://www.scotthawley.com
+    url: "https://www.scotthawley.com"
     affiliations:
       name: Belmont University 
 
@@ -73,14 +73,19 @@ _styles: >
     color: #f3f4f6;
     border-radius: 8px;    
   }
+    .callout-block b {
+        background-color: #2d3f52;
+        display: block;
+        margin: -15px -30px 10px -30px;
+        padding: 10px 30px;
+    }
 ---
 
 
 
 
 <div style="text-align: center; margin: 0;">
-This post is also an executable notebook.<br>
-Anonymized Colab Link:
+This post is an executable notebook.
 <a href="https://colab.research.google.com/drive/1QkU7NB3eqlPijv1b5GKuC97qdBUzzDVc?usp=sharing" target="_">
 <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab" style="display: inline-block;"/></a>
 <br><br>
@@ -99,12 +104,18 @@ Our discussion will bring us up to date on guidance methods for latent-space rec
 The paradigm of latent generative models is covered in another superb Dieleman post <d-cite key="dieleman2025latents"></d-cite>, and
 combining latent-space models with flow-based guidance gives us powerful, flexible tools for adding flexible controls to efficient generation. 
 
-Let's review the picture for flow-based generative modeling in latent space...
 
+
+
+<div class="callout-block">
+<b>Scope of This Tutorial</b>
+We will keep things small and lightweight to facilitate easy execution, even on a CPU. For this reason, MNIST has been chosen as our testbed, as it is sufficient for illustrating the principles herein. In the Summary at the end, we discuss how to extend the scope to larger datasets and methods such as text conditioning.
+</div>
 
 
 ## The Latent Flow-Matching Setup
 
+<!-- Let's review the picture for flow-based generative modeling in latent space. -->
 The following diagrams illustrate the three key concepts: 
 
 **a)** A VAE compresses pixel-space images into compact latent representations. "E" is for encoder and "D" is for decoder:
@@ -160,7 +171,7 @@ $$\Delta \vec{v} = { \Delta \widehat{z_1} \over 1-t }\tag{2}$$
 
 
 <div class="callout-block" markdown="1">
-###  Mathematical Details
+<b>Mathematical Details</b>
 
 *Since you're going to see more math once you try to read the scholarly literature on these topics, let's go a bit further into the math...*
 
