@@ -105,7 +105,7 @@ The key insight is that flow models generate samples through iterative integrati
 Our discussion will bring us up to date on guidance methods for latent-space rectified flow models.  While there's an extensive literature on guidance for diffusion models <d-cite key="daras2024survey"></d-cite><d-cite key="ye2024tfg"></d-cite> -- see Sander Dieleman's excellent blog post <d-cite key="dieleman2022guidance"></d-cite> for an overview --- flow matching allows us to cast these in a more accessible and intuitive way. There's some recent work unifying guidance for diffusion and flows <d-cite key="zander_greedy"></d-cite>, but in this tutorial we'll focus on a simplified treatment for flows only.
 
 The paradigm of latent generative models is covered in another superb Dieleman post <d-cite key="dieleman2025latents"></d-cite>, and
-combining latent-space models with flow-based guidance gives us powerful, flexible tools for adding flexible controls to efficient generation. 
+combining latent-space models with flow-based guidance gives us powerful, flexible tools for steering efficient generative models.
 
 
 
@@ -145,7 +145,7 @@ path="assets/img/2026-04-27-flow-where-you-want/vae_flow_diag-FlowTypes.drawio.s
 
 
 
-These (nearly) straight trajectories can be obtained by "ReFlow" distillation of another model (covered in <d-cite key="rectified_flow"></d-cite><d-cite key="hawley2025flowwithwhat"></d-cite> or by insisting during training that the models yield paths agreeing with Optimal Transport such as the "minibatch OT" method of Tong et al <d-cite key="tong2024improving"></d-cite>.  Even if the model's trajectories aren't super-straight, we'll see that the guidance methods we use can be applied fairly generally anyway. 
+These (nearly) straight trajectories can be obtained by "ReFlow" distillation of another model (covered in <d-cite key="rectified_flow"></d-cite><d-cite key="hawley2025flowwithwhat"></d-cite>) or by insisting during training that the models yield paths agreeing with Optimal Transport such as the "minibatch OT" method of Tong et al <d-cite key="tong2024improving"></d-cite>.  Even if the model's trajectories aren't super-straight, we'll see that the guidance methods we use can be applied fairly generally anyway. 
 
 
 ## Projecting and Correcting
