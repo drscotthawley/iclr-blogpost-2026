@@ -94,6 +94,9 @@ This post is an executable notebook.
 
 # Introduction
 
+Training generative models can be expensive—lots of data, electricity, compute time. 
+So what if you could take a pretrained model and add controls at inference time instead? 
+
 In this tutorial, we'll explore inference-time "plugin" methods for flow matching and rectified flow generative models like FLUX or Stable Audio Open Small. Unlike classifier-free guidance (CFG) <d-cite key="cfg"></d-cite>, which requires training the model with your desired conditioning signal, these plugin guidance methods let you add controls at inference time—even for conditions the model never saw during training.
 
 This tutorial assumes familiarity with flow-based generative models, by which we mean "flow matching" <d-cite key="lipman2023flow"></d-cite> and/or "rectified flows" <d-cite key="rectified_flow"></d-cite>.  See earlier blog posts "Flow With What You Know" <d-cite key="hawley2025flowwithwhat"></d-cite> and "A Visual Dive into Conditional Flow Matching" <d-cite key="gagneux2025cfm"></d-cite> for accessible overviews.
@@ -109,7 +112,7 @@ combining latent-space models with flow-based guidance gives us powerful, flexib
 
 <div class="callout-block">
 <b>Scope of This Tutorial</b>
-We will keep things small and lightweight to facilitate easy execution, even on a CPU. For this reason, MNIST has been chosen as our testbed, as it is sufficient for illustrating the principles herein. In the Summary at the end, we discuss how to extend the scope to larger datasets and methods such as text conditioning.
+We will keep things small and lightweight to facilitate easy execution, even on a CPU. For this reason, MNIST has been chosen as our testbed, as it is sufficient for illustrating the principles herein. In the Summary at the end, we discuss extending the scope to larger datasets and methods such as text conditioning.
 </div>
 
 
@@ -1028,11 +1031,18 @@ PnP-Flow is a general guidance method not limited to inpainting or even "linear"
 
 # Summary
 
-Training generative models can be expensive—lots of data, electricity, compute time. So what if you could take a pretrained model and add controls at inference time instead? That's what this tutorial explored. While similar ideas are emerging for steering autoregressive models <d-cite key="zhao2025steeringautoregressive"></d-cite>, here we focused on pretrained flow models.
+This tutorial walked through four approaches to adding inference-time controls to a pretrained flow model. 
+While these ideas focus on flow models, similar inference-time control methods are emerging for autoregressive models as well <d-cite key="zhao2025steeringautoregressive"></d-cite>.
 
 The key idea is simple: at each integration step, you project forward to estimate where you'll end up ($\,\widehat{z_1}\,$)
 , check how far that is from where you want to be, and add a small velocity correction to steer toward your goal. We applied this to an unconditional MNIST flow model for two tasks: generating specific digit classes via classifier guidance, and filling in masked-out regions via inpainting.
 
 We looked at four approaches. First, standard classifier guidance in pixel space—it works but it's slow because you're propagating gradients through the VAE decoder. Second, we trained a simple latent-space classifier and did the same thing much faster. Third, we implemented the linear inpainting method from Pokle et al, which operates directly on latents. Fourth, we tried PnP-Flow, which achieves guidance not by correcting velocities but by iteratively projecting samples forward and backward in time.
+
+While we kept things small by design — MNIST runs quickly even on a CPU — the methods 
+demonstrated here are not limited to toy datasets. The same velocity correction 
+framework applies to larger latent flow models such as FLUX or Stable Diffusion, 
+and the guidance signal need not come from a classifier: a CLIP-based loss, for 
+example, could enable text conditioning without any retraining.
 
 The math here is much simpler than for typical diffusion methods because flow trajectories are smooth and deterministic. We've glossed over a lot of detail compared to the research papers, but hopefully this gives you enough to experiment with your own controls. There are limits to the effectiveness of guidance: small models that don't generalize well won't suddenly work miracles if you try to push them too far outside their training distribution. Nevertheless, these plugin methods are worth exploring as accessible ways to steer generative flows where you want them to go. 
